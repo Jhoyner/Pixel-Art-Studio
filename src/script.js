@@ -37,6 +37,7 @@
   const gridSelect  = document.getElementById('gridSizeSelect');
   const hudCoords   = document.getElementById('hudCoords');
   const hudSwatch   = document.getElementById('hudSwatch');
+  const hudZoom     = document.getElementById('hudZoom');
 
   // ======================== Estado ========================
 
@@ -49,6 +50,8 @@
   let symmetryV     = false;  // Simetría vertical
   let shadedCells   = new Set(); // Previene sombreado múltiple en un mismo trazo
   let brushSize     = 1;      // Tamaño de pincel N×N (1-5)
+  const ZOOM_LEVELS = [1, 2, 3, 4, 6, 8];
+  let zoomIndex     = 0;      // Índice en ZOOM_LEVELS
 
   // 8 colores retro/industrial para la paleta rápida
   const QUICK_COLORS = [
@@ -480,6 +483,21 @@
     brushSize = parseInt(brushSlider.value, 10);
     brushLabel.textContent = `${brushSize}\u00D7${brushSize}`;
   });
+
+  // ======================== Zoom con rueda directa ========================
+
+  function applyZoom () {
+    const scale = ZOOM_LEVELS[zoomIndex];
+    canvas.style.transform = `scale(${scale})`;
+    hudZoom.textContent = `Zoom: ${Math.round(scale * 100)}%`;
+  }
+
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const dir = e.deltaY > 0 ? -1 : 1;
+    const ni = Math.max(0, Math.min(ZOOM_LEVELS.length - 1, zoomIndex + dir));
+    if (ni !== zoomIndex) { zoomIndex = ni; applyZoom(); }
+  }, { passive: false });
 
   // ======================== Atajos de teclado ========================
 
