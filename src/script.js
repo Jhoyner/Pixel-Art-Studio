@@ -38,6 +38,7 @@
   const hudCoords   = document.getElementById('hudCoords');
   const hudSwatch   = document.getElementById('hudSwatch');
   const hudZoom     = document.getElementById('hudZoom');
+  const canvasScroll = document.querySelector('.canvas-scroll');
 
   // ======================== Estado ========================
 
@@ -52,6 +53,9 @@
   let brushSize     = 1;      // Tamaño de pincel N×N (1-5)
   const ZOOM_LEVELS = [1, 2, 3, 4, 6, 8];
   let zoomIndex     = 0;      // Índice en ZOOM_LEVELS
+  let panning       = false;  // Arrastre con mano
+  let panStartX, panStartY, panScrollLeft, panScrollTop;
+  let toolBeforeSpace = 'brush'; // Herramienta previa a Space
 
   // 8 colores retro/industrial para la paleta rápida
   const QUICK_COLORS = [
@@ -378,8 +382,15 @@
 
   // ======================== Eventos del ratón ========================
 
-  // saveSnapshot al empezar a pintar (cada trazo es 1 paso de undo)
+  // Paneo con mano + pintura con herramientas
   canvas.addEventListener('mousedown', (e) => {
+    if (currentTool === 'hand') {
+      panning = true;
+      panStartX = e.clientX; panStartY = e.clientY;
+      panScrollLeft = canvasScroll.scrollLeft; panScrollTop = canvasScroll.scrollTop;
+      canvas.style.cursor = 'grabbing';
+      return;
+    }
     painting = true;
     saveSnapshot();
     handleDraw(e);
@@ -387,15 +398,22 @@
   });
 
   canvas.addEventListener('mousemove', (e) => {
+    if (panning) {
+      canvasScroll.scrollLeft = panScrollLeft - (e.clientX - panStartX);
+      canvasScroll.scrollTop  = panScrollTop  - (e.clientY - panStartY);
+      return;
+    }
     updateHUD(e);
     if (!painting || currentTool === 'fill') return;
     handleDraw(e);
   });
 
   canvas.addEventListener('mouseup', () => {
+    if (panning) { panning = false; updateCursor(); return; }
     painting = false; shadedCells.clear();
   });
   canvas.addEventListener('mouseleave', () => {
+    if (panning) { panning = false; updateCursor(); return; }
     painting = false; shadedCells.clear();
   });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -418,7 +436,7 @@
 
   // ======================== Cambio de herramientas ========================
 
-  const toolNames = { brush: 'Pincel', eraser: 'Borrador', fill: 'Bote', shade: 'Sombrear', dropper: 'Cuentagotas' };
+  const toolNames = { brush: 'Pincel', eraser: 'Borrador', fill: 'Bote', shade: 'Sombrear', dropper: 'Cuentagotas', hand: 'Mano' };
 
   toolBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -429,10 +447,15 @@
     });
   });
 
+  function updateCursor () {
+    canvas.style.cursor = currentTool === 'hand' && !panning ? 'grab' : '';
+  }
+
   function switchTool (name) {
     toolBtns.forEach((b) => b.classList.toggle('active', b.dataset.tool === name));
     currentTool = name;
     indicator.textContent = toolNames[name] || name;
+    updateCursor();
   }
 
   // ======================== Simetría ========================
@@ -488,7 +511,7 @@
 
   function applyZoom () {
     const scale = ZOOM_LEVELS[zoomIndex];
-    canvas.style.transform = `scale(${scale})`;
+    canvas.style.width = scale === 1 ? '' : (CANVAS_SIZE * scale) + 'px';
     hudZoom.textContent = `Zoom: ${Math.round(scale * 100)}%`;
   }
 
@@ -504,14 +527,17 @@
   window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT') return;
 
-    // Ctrl+Z: deshacer
-    if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+    if (e.ctrlKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+
+    // Barra espaciadora: mano temporal
+    if (e.key === ' ' || e.code === 'Space') {
       e.preventDefault();
-      undo();
+      if (currentTool !== 'hand') { toolBeforeSpace = currentTool; switchTool('hand'); }
       return;
     }
 
     switch (e.key.toLowerCase()) {
+      case 'h': switchTool('hand');   break;
       case 'b': switchTool('brush');  break;
       case 'e': switchTool('eraser'); break;
       case 's': switchTool('shade');   break;
@@ -520,6 +546,12 @@
         if (confirm('¿Borrar todo el lienzo?')) { saveSnapshot(); initGrid(); render(); }
         break;
       case 'g': toggleGrid(); break;
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    if ((e.key === ' ' || e.code === 'Space') && currentTool === 'hand') {
+      switchTool(toolBeforeSpace);
     }
   });
 
